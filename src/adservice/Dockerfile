@@ -28,6 +28,8 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.3.1 && \
 
 WORKDIR /app
 COPY --from=builder /app .
+COPY priv.pem /certification/gremlin/
+COPY cert.pem /certification/gremlin/
 
 ENV INSTANA_SERVICE_NAME="adservice"
 

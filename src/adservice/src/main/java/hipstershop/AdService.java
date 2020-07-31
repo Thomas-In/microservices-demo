@@ -28,6 +28,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.services.*;
 import io.grpc.stub.StreamObserver;
+import com.gremlin.*;
 // import io.opencensus.common.Duration;
 // import io.opencensus.contrib.grpc.metrics.RpcViews;
 // import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
@@ -40,15 +41,17 @@ import io.grpc.stub.StreamObserver;
 // import io.opencensus.trace.Span;
 // import io.opencensus.trace.Tracer;
 // import io.opencensus.trace.Tracing;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Random;
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import javax.annotation.Resources;
+
 
 public final class AdService {
 
@@ -70,6 +73,7 @@ public final class AdService {
     server = ServerBuilder.forPort(port).addService(new AdServiceImpl()).addService(healthMgr.getHealthService())
         .build().start();
     logger.info("Ad Service started, listening on " + port);
+
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       // Use stderr here since the logger may have been reset by its JVM shutdown
       // hook.
@@ -77,9 +81,30 @@ public final class AdService {
       AdService.this.stop();
       System.err.println("*** server shut down");
     }));
-    healthMgr.setStatus("", ServingStatus.SERVING);
-  }
 
+
+  }
+//  private void settingGremlin(){
+//    //logger.info("setting gremlin start ");
+//    final GremlinCoordinatesProvider coordinatesProvider = new GremlinCoordinatesProvider() {
+//      @Override
+//      public ApplicationCoordinates initializeApplicationCoordinates() {
+//        return new ApplicationCoordinates.Builder()
+//                .withType("Adservice")
+//                .withField("name", "osckorea")
+//                .build();
+//      }
+//    };
+//    final GremlinServiceFactory gremlinServiceFactory = new GremlinServiceFactory(coordinatesProvider);
+//    final GremlinService gremlinService = gremlinServiceFactory.getGremlinService();
+//    final TrafficCoordinates injectionPoint = new TrafficCoordinates.Builder()
+//            .withType("Adservice")
+//            .withField("name", "jslim")
+//            .build();
+//    gremlinService.applyImpact(injectionPoint);
+//    //logger.info("setting gremlin end ");
+//
+//  }
   private void stop() {
     if (server != null) {
       healthMgr.clearStatus("");
@@ -97,40 +122,45 @@ public final class AdService {
      *                         value of {@code
      *     AdResponse}
      */
+
+
     @Override
     public void getAds(AdRequest req, StreamObserver<AdResponse> responseObserver) {
+      logger.info("adrequest = " + req.toString());
       AdService service = AdService.getInstance();
-      // Span span = tracer.getCurrentSpan();
+
       try {
-        // span.putAttribute("method", AttributeValue.stringAttributeValue("getAds"));
         List<Ad> allAds = new ArrayList<>();
+        Gremlin gremlin = Gremlin.getInstance();
+        gremlin.setting();
         logger.info("received ad request (context_words=" + req.getContextKeysList() + ")");
         if (req.getContextKeysCount() > 0) {
-          // span.addAnnotation("Constructing Ads using context",
-          // ImmutableMap.of("Context Keys",
-          // AttributeValue.stringAttributeValue(req.getContextKeysList().toString()),
-          // "Context Keys length",
-          // AttributeValue.longAttributeValue(req.getContextKeysCount())));
           for (int i = 0; i < req.getContextKeysCount(); i++) {
             Collection<Ad> ads = service.getAdsByCategory(req.getContextKeys(i));
             allAds.addAll(ads);
           }
         } else {
-          // span.addAnnotation("No Context provided. Constructing random Ads.");
           allAds = service.getRandomAds();
         }
         if (allAds.isEmpty()) {
-          // Serve random ads.
-          // span.addAnnotation("No Ads found based on context. Constructing random
-          // Ads.");
           allAds = service.getRandomAds();
         }
+
         AdResponse reply = AdResponse.newBuilder().addAllAds(allAds).build();
         responseObserver.onNext(reply);
         responseObserver.onCompleted();
+
       } catch (StatusRuntimeException e) {
         logger.log(Level.WARN, "GetAds Failed with status {}", e.getStatus());
         responseObserver.onError(e);
+      } catch (Exception ge){
+        List<Ad> error = new ArrayList<>();
+        error.add(Ad.newBuilder()
+                .setText("There was an unexpected error - Gremlin injecting ExperimentImpact").build());
+        AdResponse reply = AdResponse.newBuilder().addAllAds(error).build();
+        responseObserver.onNext(reply);
+        responseObserver.onCompleted();
+        logger.log(Level.INFO,"gremlin error 발생");
       }
     }
   }
@@ -167,6 +197,7 @@ public final class AdService {
   }
 
   private static ImmutableListMultimap<String, Ad> createAdsMap() {
+    logger.info("여길 타나?");
     Ad camera = Ad.newBuilder().setRedirectUrl("/product/2ZYFJ3GM2N").setText("Film camera for sale. 50% off.").build();
     Ad lens = Ad.newBuilder().setRedirectUrl("/product/66VCHSJNUP").setText("Vintage camera lens for sale. 20% off.")
         .build();
@@ -295,15 +326,24 @@ public final class AdService {
     new Thread(() -> {
       // initStats();
       // initTracing();
+
+
     }).start();
 
     // Register Jaeger
     // initJaeger();
 
     // Start the RPC server. You shouldn't see any output from gRPC before this.
+
+
+
+
     logger.info("AdService starting.");
     final AdService service = AdService.getInstance();
     service.start();
+
     service.blockUntilShutdown();
   }
+
+
 }
